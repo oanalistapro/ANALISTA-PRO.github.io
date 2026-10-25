@@ -1,0 +1,347 @@
+
+name: Criar APK ANALISTA PRO
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  criar-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Baixar arquivos do GitHub
+        uses: actions/checkout@v4
+
+      - name: Instalar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Preparar Android SDK
+        shell: bash
+        run: |
+          echo "ANDROID_HOME=$ANDROID_SDK_ROOT" >> "$GITHUB_ENV"
+          yes | "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" --licenses || true
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" "platform-tools" "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Preparar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Criar aplicativo Android com banner de teste
+        shell: bash
+        run: |
+          mkdir -p appandroid/app/src/main/java/com/analistapro/app
+          mkdir -p appandroid/app/src/main/res/drawable
+          mkdir -p appandroid/app/src/main/res/xml
+          cp icon-192.png appandroid/app/src/main/res/drawable/launcher_icon.png
+
+          cat > appandroid/settings.gradle <<'EOF'
+          pluginManagement {
+              repositories { google(); mavenCentral(); gradlePluginPortal() }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories { google(); mavenCentral() }
+          }
+          rootProject.name = "AnalistaPro"
+          include ":app"
+          EOF
+
+          cat > appandroid/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
+
+          cat > appandroid/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m
+          android.useAndroidX=true
+          EOF
+
+          cat > appandroid/app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+          android {
+              namespace 'com.analistapro.app'
+              compileSdk 35
+              defaultConfig {
+                  applicationId 'com.analistapro.app'
+                  minSdk 24
+                  targetSdk 35
+                  versionCode 5
+                  versionName '1.4'
+              }
+          }
+          dependencies {
+              implementation 'androidx.core:core:1.13.1'
+              implementation 'com.google.android.gms:play-services-ads:24.4.0'
+          }
+          EOF
+
+          cat > appandroid/app/src/main/res/xml/file_paths.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <paths xmlns:android="http://schemas.android.com/apk/res/android">
+              <cache-path name="shared_images" path="shared/" />
+          </paths>
+          EOF
+
+          cat > appandroid/app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+              <uses-permission android:name="android.permission.INTERNET"/>
+              <uses-permission android:name="com.google.android.gms.permission.AD_ID"/>
+              <application
+                  android:label="ANALISTA PRO"
+                  android:icon="@drawable/launcher_icon"
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:usesCleartextTraffic="false"
+                  android:allowBackup="false">
+                  <meta-data
+                      android:name="com.google.android.gms.ads.APPLICATION_ID"
+                      android:value="ca-app-pub-3077449818796089~1270800667"/>
+                  <provider
+                      android:name="androidx.core.content.FileProvider"
+                      android:authorities="${applicationId}.fileprovider"
+                      android:exported="false"
+                      android:grantUriPermissions="true">
+                      <meta-data
+                          android:name="android.support.FILE_PROVIDER_PATHS"
+                          android:resource="@xml/file_paths" />
+                  </provider>
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > appandroid/app/src/main/java/com/analistapro/app/MainActivity.java <<'EOF'
+          package com.analistapro.app;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.content.Intent;
+          import android.net.Uri;
+          import android.webkit.WebView;
+          import android.webkit.WebViewClient;
+          import android.webkit.WebChromeClient;
+          import android.webkit.WebSettings;
+          import android.webkit.WebResourceRequest;
+          import android.webkit.JavascriptInterface;
+          import android.webkit.ValueCallback;
+          import android.util.Base64;
+          import android.widget.Toast;
+          import android.widget.LinearLayout;
+          import android.view.View;
+          import androidx.core.content.FileProvider;
+          import com.google.android.gms.ads.AdView;
+          import com.google.android.gms.ads.AdSize;
+          import com.google.android.gms.ads.AdRequest;
+          import com.google.android.gms.ads.MobileAds;
+          import com.google.android.gms.ads.AdListener;
+          import com.google.android.gms.ads.LoadAdError;
+          import java.io.File;
+          import java.io.FileOutputStream;
+
+          public class MainActivity extends Activity {
+              private static final int FILE_REQUEST = 5102;
+              private static final String SITE = "https://oanalistapro.github.io/ANALISTA-PRO.github.io/";
+              private WebView web;
+              private ValueCallback<Uri[]> fileCallback;
+              private AdView banner;
+
+              @Override public void onCreate(Bundle state) {
+                  super.onCreate(state);
+                  web = new WebView(this);
+                  LinearLayout layout = new LinearLayout(this);
+                  layout.setOrientation(LinearLayout.VERTICAL);
+                  layout.setBackgroundColor(android.graphics.Color.WHITE);
+                  layout.addView(web, new LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f));
+
+                  banner = new AdView(this);
+                  // ID OFICIAL DE TESTE DO GOOGLE. Não gera receita.
+                  // Após aprovação, substituir pelo ID real:
+                  // ca-app-pub-3077449818796089/6060092917
+                  banner.setAdUnitId("ca-app-pub-3940256099942544/6300978111");
+                  banner.setAdSize(AdSize.BANNER);
+                  banner.setVisibility(View.GONE);
+                  layout.addView(banner, new LinearLayout.LayoutParams(
+                      LinearLayout.LayoutParams.MATCH_PARENT,
+                      LinearLayout.LayoutParams.WRAP_CONTENT));
+                  setContentView(layout);
+
+                  MobileAds.initialize(this, status -> runOnUiThread(() -> {
+                      banner.setAdListener(new AdListener() {
+                          @Override public void onAdLoaded() {
+                              banner.setVisibility(View.VISIBLE);
+                          }
+                          @Override public void onAdFailedToLoad(LoadAdError error) {
+                              banner.setVisibility(View.GONE);
+                          }
+                      });
+                      banner.loadAd(new AdRequest.Builder().build());
+                  }));
+
+                  WebSettings settings = web.getSettings();
+                  settings.setJavaScriptEnabled(true);
+                  settings.setDomStorageEnabled(true);
+                  settings.setAllowFileAccess(true);
+
+                  AndroidBridge bridge = new AndroidBridge();
+                  web.addJavascriptInterface(bridge, "AnalistaAndroid");
+                  web.addJavascriptInterface(bridge, "AnalistaProAndroid");
+
+                  web.setWebChromeClient(new WebChromeClient() {
+                      @Override public boolean onShowFileChooser(
+                              WebView view,
+                              ValueCallback<Uri[]> callback,
+                              FileChooserParams params) {
+                          if (fileCallback != null) fileCallback.onReceiveValue(null);
+                          fileCallback = callback;
+                          try {
+                              Intent intent = params.createIntent();
+                              startActivityForResult(intent, FILE_REQUEST);
+                              return true;
+                          } catch (Exception e) {
+                              fileCallback = null;
+                              callback.onReceiveValue(null);
+                              Toast.makeText(MainActivity.this,
+                                  "Não foi possível abrir a galeria",
+                                  Toast.LENGTH_LONG).show();
+                              return true;
+                          }
+                      }
+                  });
+
+                  web.setWebViewClient(new WebViewClient() {
+                      @Override public boolean shouldOverrideUrlLoading(
+                              WebView view,
+                              WebResourceRequest request) {
+                          Uri uri = request.getUrl();
+                          if ("https".equals(uri.getScheme())
+                              && "oanalistapro.github.io".equals(uri.getHost())
+                              && uri.getPath() != null
+                              && uri.getPath().startsWith("/ANALISTA-PRO.github.io/"))
+                              return false;
+                          try {
+                              startActivity(new Intent(Intent.ACTION_VIEW, uri));
+                          } catch (Exception ignored) {}
+                          return true;
+                      }
+                  });
+
+                  web.loadUrl(SITE);
+              }
+
+              @Override protected void onActivityResult(
+                      int requestCode, int resultCode, Intent data) {
+                  super.onActivityResult(requestCode, resultCode, data);
+                  if (requestCode == FILE_REQUEST && fileCallback != null) {
+                      Uri[] result = WebChromeClient.FileChooserParams.parseResult(
+                          resultCode, data);
+                      fileCallback.onReceiveValue(result);
+                      fileCallback = null;
+                  }
+              }
+
+              public class AndroidBridge {
+                  @JavascriptInterface
+                  public void shareImage(String dataUrl) {
+                      try {
+                          if (dataUrl == null || dataUrl.isEmpty())
+                              throw new IllegalArgumentException("Imagem vazia");
+
+                          String b64 = dataUrl.startsWith("data:image/png;base64,")
+                              ? dataUrl.substring("data:image/png;base64,".length())
+                              : dataUrl;
+
+                          byte[] bytes = Base64.decode(b64, Base64.DEFAULT);
+
+                          if (bytes.length == 0 || bytes.length > 12 * 1024 * 1024)
+                              throw new IllegalArgumentException("Imagem muito grande");
+
+                          File folder = new File(getCacheDir(), "shared");
+                          if (!folder.exists() && !folder.mkdirs())
+                              throw new IllegalStateException("Pasta indisponível");
+
+                          File output = new File(folder, "analista-pro-relatorio.png");
+                          try (FileOutputStream stream = new FileOutputStream(output)) {
+                              stream.write(bytes);
+                          }
+
+                          Uri uri = FileProvider.getUriForFile(
+                              MainActivity.this,
+                              getPackageName() + ".fileprovider",
+                              output);
+
+                          Intent send = new Intent(Intent.ACTION_SEND);
+                          send.setType("image/png");
+                          send.putExtra(Intent.EXTRA_STREAM, uri);
+                          send.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+                          send.setClipData(android.content.ClipData.newUri(
+                              getContentResolver(),
+                              "Imagem ANALISTA PRO",
+                              uri));
+
+                          runOnUiThread(() ->
+                              startActivity(Intent.createChooser(
+                                  send, "Compartilhar imagem")));
+
+                      } catch (Exception e) {
+                          runOnUiThread(() ->
+                              Toast.makeText(MainActivity.this,
+                                  "Erro ao compartilhar: " + e.getMessage(),
+                                  Toast.LENGTH_LONG).show());
+                      }
+                  }
+              }
+
+              @Override protected void onDestroy() {
+                  if (banner != null) banner.destroy();
+                  if (web != null) web.destroy();
+                  super.onDestroy();
+              }
+
+              @Override public void onBackPressed() {
+                  if (web.canGoBack()) web.goBack();
+                  else super.onBackPressed();
+              }
+          }
+          EOF
+
+      - name: Compilar APK
+        run: |
+          cd appandroid
+          gradle --no-daemon :app:assembleDebug
+
+      - name: Preparar arquivo APK
+        run: cp appandroid/app/build/outputs/apk/debug/app-debug.apk ANALISTA_PRO.apk
+
+      - name: Publicar APK no GitHub
+        shell: bash
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add -f ANALISTA_PRO.apk
+          if ! git diff --cached --quiet; then
+            git commit -m "Publicar APK ANALISTA PRO"
+            git push
+          fi
+
+      - name: Disponibilizar APK para download
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANALISTA_PRO_ANDROID
+          path: ANALISTA_PRO.apk
