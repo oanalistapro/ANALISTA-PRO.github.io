@@ -1,0 +1,297 @@
+
+/* ANALISTA PRO — CENTRAL ADM UNIVERSAL */
+(() => {
+  "use strict";
+
+  const ADMIN = "6EZlNQa738hBOrQL3krbLvDxSuK2";
+  const $ = id => document.getElementById(id);
+  const user = () => window.firebase?.auth?.().currentUser;
+  const db = () => window.firebase?.firestore?.();
+
+  const escape = text =>
+    String(text || "").replace(/[&<>"']/g, c => ({
+      "&": "&amp;",
+      "<": "&lt;",
+      ">": "&gt;",
+      '"': "&quot;",
+      "'": "&#39;"
+    }[c]));
+
+  // VISUAL DAS CAIXINHAS
+  const style = document.createElement("style");
+
+  style.textContent = `
+    .apFold {
+      border: 1px solid #34516d;
+      border-radius: 12px;
+      margin: 12px 0;
+      overflow: hidden;
+    }
+
+    .apFold > summary {
+      cursor: pointer;
+      background: #172b43;
+      color: white;
+      padding: 14px;
+      font-weight: 700;
+    }
+
+    .apFold > summary::before {
+      content: "▸ ";
+      color: #27b5ff;
+    }
+
+    .apFold[open] > summary::before {
+      content: "▾ ";
+    }
+
+    .apFold > div {
+      padding: 10px;
+      max-height: 350px;
+      overflow: auto;
+    }
+
+    #apUserReplies {
+      padding: 14px;
+      background: #12253a;
+      color: white;
+      border-radius: 12px;
+      margin: 12px 0;
+    }
+
+    #apUserReplies p {
+      border-bottom: 1px solid #40536a;
+      padding: 8px;
+    }
+
+    .apReplyEditor textarea {
+      display: block;
+      width: 100%;
+      padding: 10px;
+      margin: 8px 0;
+      border-radius: 9px;
+      background: #152b45;
+      color: white;
+    }
+  `;
+
+  document.head.appendChild(style);
+
+  // TRANSFORMA LISTAS EM CAIXINHAS
+  function criarCaixinha(id, titulo) {
+    const elemento = $(id);
+
+    if (!elemento || elemento.closest(".apFold")) {
+      return;
+    }
+
+    const card = elemento.closest(".card");
+
+    if (!card || !card.parentNode) {
+      return;
+    }
+
+    const caixa = document.createElement("details");
+    caixa.className = "apFold";
+
+    const cabecalho = document.createElement("summary");
+    cabecalho.textContent = titulo;
+
+    const conteudo = document.createElement("div");
+
+    card.parentNode.insertBefore(caixa, card);
+    caixa.append(cabecalho, conteudo);
+    conteudo.appendChild(card);
+  }
+
+  // CENTRAL DO ADMINISTRADOR
+  function iniciarADM() {
+    if (user()?.uid !== ADMIN) return;
+
+    criarCaixinha(
+      "proVisits",
+      "📋 Entradas recentes — abrir"
+    );
+
+    criarCaixinha(
+      "proMessages",
+      "💬 Mensagens recebidas — abrir"
+    );
+
+    const painel = $("proCentral");
+
+    if (!painel || painel.dataset.replyFixed) {
+      return;
+    }
+
+    painel.dataset.replyFixed = "1";
+
+    // CORRIGE O BOTÃO RESPONDER
+    painel.addEventListener("click", async evento => {
+      const botao = evento.target.closest(
+        "button[data-reply]"
+      );
+
+      if (!botao) return;
+
+      evento.preventDefault();
+      evento.stopImmediatePropagation();
+
+      const card = botao.closest(".card");
+
+      if (!card) return;
+
+      let editor = card.querySelector(".apReplyEditor");
+
+      if (editor) {
+        editor.remove();
+        return;
+      }
+
+      editor = document.createElement("div");
+      editor.className = "apReplyEditor";
+
+      const campo = document.createElement("textarea");
+      campo.rows = 3;
+      campo.placeholder = "Digite sua resposta";
+
+      const enviar = document.createElement("button");
+      enviar.type = "button";
+      enviar.textContent = "📨 Enviar resposta";
+
+      const status = document.createElement("p");
+
+      editor.append(campo, enviar, status);
+      card.appendChild(editor);
+
+      enviar.onclick = async () => {
+        const resposta = campo.value.trim();
+
+        if (!resposta) {
+          status.textContent = "Digite sua resposta.";
+          return;
+        }
+
+        enviar.disabled = true;
+        status.textContent = "Enviando...";
+
+        try {
+          await db()
+            .collection("admMessages")
+            .doc(botao.dataset.reply)
+            .update({
+              reply: resposta.slice(0, 3000),
+              read: true,
+              repliedAt:
+                firebase.firestore.FieldValue
+                  .serverTimestamp()
+            });
+
+          status.textContent =
+            "Resposta enviada pelo Firebase.";
+
+          campo.value = "";
+
+        } catch (erro) {
+          status.textContent =
+            "Erro: " + (erro.code || erro.message);
+
+        } finally {
+          enviar.disabled = false;
+        }
+      };
+    }, true);
+  }
+
+  // RESPOSTAS VISÍVEIS PARA OS USUÁRIOS
+  let cancelarEscuta = null;
+  let usuarioMonitorado = "";
+
+  function iniciarMensagensUsuario() {
+    const usuario = user();
+
+    if (
+      !usuario ||
+      usuario.uid === ADMIN ||
+      !db() ||
+      usuarioMonitorado === usuario.uid
+    ) {
+      return;
+    }
+
+    if (cancelarEscuta) cancelarEscuta();
+
+    usuarioMonitorado = usuario.uid;
+
+    let caixa = $("apUserReplies");
+
+    if (!caixa) {
+      caixa = document.createElement("section");
+      caixa.id = "apUserReplies";
+
+      const destino =
+        $("admMsg")?.closest(".card") ||
+        $("admMsg")?.parentElement;
+
+      if (destino) {
+        destino.appendChild(caixa);
+      } else {
+        document.body.appendChild(caixa);
+      }
+    }
+
+    caixa.innerHTML =
+      "<b>📩 Respostas do ADM</b><p>Carregando...</p>";
+
+    cancelarEscuta = db()
+      .collection("admMessages")
+      .where("uid", "==", usuario.uid)
+      .onSnapshot(snapshot => {
+
+        const mensagens = snapshot.docs
+          .map(doc => doc.data())
+          .filter(mensagem => mensagem.reply);
+
+        caixa.innerHTML =
+          "<b>📩 Respostas do ADM</b>" +
+          (
+            mensagens.length
+              ? mensagens.map(mensagem => `
+                  <p>
+                    <small>Sua mensagem:</small>
+                    ${escape(mensagem.text)}
+                    <br>
+                    <b>ADM:</b>
+                    ${escape(mensagem.reply)}
+                  </p>
+                `).join("")
+              : "<p>Nenhuma resposta ainda.</p>"
+          );
+
+      }, erro => {
+        caixa.innerHTML =
+          "<b>📩 Respostas do ADM</b>" +
+          "<p>Erro: " +
+          escape(erro.code || erro.message) +
+          "</p>";
+      });
+  }
+
+  // INICIALIZAÇÃO
+  function iniciar() {
+    iniciarADM();
+    iniciarMensagensUsuario();
+  }
+
+  if (document.readyState === "loading") {
+    document.addEventListener(
+      "DOMContentLoaded",
+      iniciar
+    );
+  } else {
+    iniciar();
+  }
+
+  setInterval(iniciar, 1800);
+
+})();
