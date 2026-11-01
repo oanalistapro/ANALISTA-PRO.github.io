@@ -1,3 +1,4 @@
+
 pluginManagement {
     repositories {
         google()
@@ -15,6 +16,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "AnalistaPro"
-
 include ':app'
-project(':app').projectDir = file('Aplicativo')
