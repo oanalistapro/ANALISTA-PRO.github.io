@@ -1,0 +1,79 @@
+
+name: ANALISTA PRO V8 - Google Nativo
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  gerar-apk:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Baixar repositorio
+        uses: actions/checkout@v4
+
+      - name: Extrair projeto Android V8
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f ANALISTA_PRO_GOOGLE_NATIVO_V8.zip || {
+            echo "ERRO: ZIP V8 nao encontrado na raiz."
+            exit 1
+          }
+          unzip -o ANALISTA_PRO_GOOGLE_NATIVO_V8.zip \
+            -d "$RUNNER_TEMP/analista-v8"
+
+          cp -r "$RUNNER_TEMP/analista-v8/app" ./app
+          cp "$RUNNER_TEMP/analista-v8/build.gradle" ./build.gradle
+          cp "$RUNNER_TEMP/analista-v8/settings.gradle" ./settings.gradle
+          cp "$RUNNER_TEMP/analista-v8/gradle.properties" ./gradle.properties
+
+      - name: Instalar Java 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Configurar Gradle
+        uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.9'
+
+      - name: Preparar Android SDK
+        shell: bash
+        run: |
+          "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
+            "platforms;android-35" "build-tools;35.0.0"
+
+      - name: Recuperar assinatura original
+        shell: bash
+        env:
+          APK_KEYSTORE_BASE64: ${{ secrets.APK_KEYSTORE_BASE64 }}
+        run: |
+          set -euo pipefail
+          test -n "$APK_KEYSTORE_BASE64"
+          printf '%s' "$APK_KEYSTORE_BASE64" |
+            tr -d '\r\n\t ' |
+            base64 --decode > release.keystore
+          test -s release.keystore
+
+      - name: Compilar APK Google Nativo
+        shell: bash
+        env:
+          APK_STORE_PASSWORD: ${{ secrets.APK_STORE_PASSWORD }}
+          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          gradle --no-daemon :app:assembleRelease
+          cp app/build/outputs/apk/release/app-release.apk \
+            ANALISTA_PRO_V8.apk
+
+      - name: Disponibilizar APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: ANALISTA_PRO_V8_ANDROID
+          path: ANALISTA_PRO_V8.apk
