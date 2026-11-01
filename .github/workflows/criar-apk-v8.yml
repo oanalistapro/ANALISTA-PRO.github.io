@@ -1,5 +1,5 @@
 
-name: ANALISTA PRO V8 - Google Nativo
+name: ANALISTA PRO V8 - APK Google Nativo
 
 on:
   workflow_dispatch:
@@ -15,47 +15,44 @@ jobs:
       - name: Baixar repositorio
         uses: actions/checkout@v4
 
-      - name: Localizar e extrair projeto V8
+      - name: Verificar projeto Android
         shell: bash
         run: |
           set -euo pipefail
 
-          echo "Arquivos do repositorio:"
-          find . -maxdepth 4 -type f | head -80
+          echo "Verificando arquivos Android..."
 
-          ZIP=$(find . -type f \
-            -iname "*GOOGLE*NATIVO*V8*.zip" \
-            -print -quit)
-
-          if [ -z "$ZIP" ]; then
-            echo "ERRO: ZIP V8 nao encontrado."
-            echo "Confira se o ZIP esta na branch Principal."
+          test -f settings.gradle || {
+            echo "ERRO: falta settings.gradle"
             exit 1
-          fi
+          }
 
-          echo "Arquivo encontrado: $ZIP"
-
-          mkdir -p "$RUNNER_TEMP/v8"
-          unzip -o "$ZIP" -d "$RUNNER_TEMP/v8"
-
-          PROJETO=$(find "$RUNNER_TEMP/v8" \
-            -name settings.gradle -type f \
-            -printf '%h\n' | head -1)
-
-          if [ -z "$PROJETO" ]; then
-            echo "ERRO: Projeto Gradle nao encontrado no ZIP."
+          test -f build.gradle || {
+            echo "ERRO: falta build.gradle"
             exit 1
-          fi
+          }
 
-          cp -r "$PROJETO/app" ./app
-          cp "$PROJETO/build.gradle" ./build.gradle
-          cp "$PROJETO/settings.gradle" ./settings.gradle
-          cp "$PROJETO/gradle.properties" ./gradle.properties
+          test -f app/build.gradle || {
+            echo "ERRO: falta app/build.gradle"
+            exit 1
+          }
 
-          test -f app/google-services.json
-          test -f app/build.gradle
+          test -f app/google-services.json || {
+            echo "ERRO: falta app/google-services.json"
+            exit 1
+          }
 
-          echo "Projeto Android extraido."
+          test -f app/src/main/AndroidManifest.xml || {
+            echo "ERRO: falta AndroidManifest.xml"
+            exit 1
+          }
+
+          test -f app/src/main/java/com/analistapro/app/MainActivity.java || {
+            echo "ERRO: falta MainActivity.java"
+            exit 1
+          }
+
+          echo "Arquivos Android encontrados!"
 
       - name: Instalar Java 17
         uses: actions/setup-java@v4
@@ -71,6 +68,8 @@ jobs:
       - name: Preparar Android SDK
         shell: bash
         run: |
+          set -euo pipefail
+
           "$ANDROID_SDK_ROOT/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-35" \
             "build-tools;35.0.0"
@@ -90,7 +89,7 @@ jobs:
 
           test -s release.keystore
 
-      - name: Compilar APK Google Nativo
+      - name: Compilar APK
         shell: bash
         env:
           APK_STORE_PASSWORD: ${{ secrets.APK_STORE_PASSWORD }}
