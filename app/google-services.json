@@ -1,0 +1,68 @@
+{
+  "project_info": {
+    "project_number": "1057472479988",
+    "project_id": "analista-ff",
+    "storage_bucket": "analista-ff.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1057472479988:android:4345d34c84fb526d1554a1",
+        "android_client_info": {
+          "package_name": "admin.html"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1057472479988-17lvs1a5anrh6jc7j76qrq7131ng1f7j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCdUjJCTtJF6DUkYAa51kN5zSXdQqXfdUU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1057472479988-17lvs1a5anrh6jc7j76qrq7131ng1f7j.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:1057472479988:android:0cc2857dc3807a071554a1",
+        "android_client_info": {
+          "package_name": "com.analistapro.app"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "1057472479988-17lvs1a5anrh6jc7j76qrq7131ng1f7j.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCdUjJCTtJF6DUkYAa51kN5zSXdQqXfdUU"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "1057472479988-17lvs1a5anrh6jc7j76qrq7131ng1f7j.apps.googleusercontent.com",
+              "client_type": 3
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
