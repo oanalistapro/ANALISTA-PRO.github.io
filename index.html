@@ -4109,3 +4109,41 @@ if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",
 </script><script id="ap-cloud-nav-connect">(function(){function bind(){const nav=document.getElementById('apCloudNav'),old=document.getElementById('apCloudBtn');if(!nav||!old)return;nav.addEventListener('click',()=>{if(!window.firebase?.auth?.().currentUser){alert('Entre na sua conta para acessar a nuvem.');return;}old.click();});}if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',bind);else bind();})();</script><style id="ap-mvp-legal-v2">
 .apMvpPremium{max-width:420px;margin:22px auto;padding:24px 16px;text-align:center;color:#fff;border:2px solid #e5b95c;border-radius:22px;background:radial-gradient(ellipse at 50% 0%,#67481b,#171d2d 55%,#090c16);box-shadow:0 8px 30px #0008,0 0 23px #ffbc4544;animation:apMvpLevitate 5s ease-in-out infinite}.apMvpPremium h2{color:#ffda80!important;font-size:26px}.apMvpPremium h3{color:#fff!important;font-size:25px;margin:10px 0}.apMvpPremium b,.apMvpKicker,.apMvpDate{color:#ffda80}.apMvpPortrait{display:block;width:170px;height:205px;object-fit:cover;margin:18px auto;border:3px solid #e3b65c;border-radius:18px}.apMvpPlaceholder{display:grid;place-items:center;font-size:65px;background:#252a3b}.apMvpKills{font-size:46px;font-weight:900;color:#ffd26b}.apMvpKills small{font-size:16px}.apTermsFooterLink{display:inline-block!important;margin-left:12px!important;padding:6px 10px!important;background:transparent!important;border:1px solid #72809b!important;border-radius:8px!important;color:inherit!important;font-size:12px!important;cursor:pointer!important}.apLegalLayer{position:fixed;inset:0;z-index:2147483001;display:none;overflow:auto;background:#020611e8;padding:24px 12px}.apLegalLayer.open{display:block}.apLegalPanel{max-width:650px;margin:20px auto;padding:25px;border:1px solid #a77b34;border-radius:20px;background:#111b2b;color:#eaf1ff;line-height:1.6}.apLegalPanel h2,.apLegalPanel h3{color:#ffd16e}.apLegalPanel button{background:#233954;color:#fff;padding:9px 15px;border:0;border-radius:9px;cursor:pointer}@keyframes apMvpLevitate{50%{transform:translateY(-7px)}}@media(prefers-reduced-motion:reduce){.apMvpPremium{animation:none}}
 </style><div class="apLegalLayer" id="apLegalLayer" role="dialog" aria-modal="true" aria-label="Termos de Uso"><div class="apLegalPanel"><button type="button" onclick="window.apCloseLegalTerms()">✕ Fechar</button><h2>📜 ANALISTA PRO · Termos de Uso</h2><h3>Sobre o aplicativo</h3><p>O ANALISTA PRO é uma ferramenta de organização de campeonatos e treinos, com cadastro de equipes e jogadores, registro de resultados, classificação, tabelas, destaques MVP e compartilhamento de informações.</p><h3>Licença de uso</h3><p>O usuário recebe permissão para utilizar os recursos disponíveis no aplicativo, respeitando as condições de acesso. O uso não transfere a propriedade do software, marca ou código.</p><h3>Responsabilidades</h3><p>Quem organiza o campeonato deve conferir os dados, resultados, nomes, fotos e permissões de uso das imagens cadastradas. Os destaques MVP são definidos pelo organizador.</p><h3>Privacidade</h3><p>O aplicativo utiliza autenticação e armazenamento para manter contas e dados dos campeonatos. Evite divulgar informações pessoais sem autorização. Para dúvidas sobre acesso ou dados, entre em contato com o administrador pelos canais disponíveis no aplicativo.</p><h3>Disponibilidade</h3><p>Algumas funções dependem de internet e de serviços externos. Atualizações, manutenção e instabilidades podem afetar temporariamente o acesso.</p><h3>Suporte e contato</h3><p>Para suporte, liberação, dúvidas sobre a licença ou problemas com o aplicativo, utilize a opção <b>Falar com ADM</b> no ANALISTA PRO.</p><p style="opacity:.7;font-size:12px">Texto informativo inicial, sujeito à revisão antes da publicação como documento jurídico definitivo.</p></div></div><script id="ap-legal-script">window.apOpenLegalTerms=()=>document.getElementById('apLegalLayer')?.classList.add('open');window.apCloseLegalTerms=()=>document.getElementById('apLegalLayer')?.classList.remove('open');document.addEventListener('click',e=>{if(e.target?.id==='apLegalLayer')window.apCloseLegalTerms()});</script></body></html>
+
+/* MVP DO DIA - VISUAL COMPACTO */
+
+.mvp-card {
+  text-align: center;
+  padding: 16px 12px;
+}
+
+.mvp-card h2,
+.mvp-card h3 {
+  text-align: center;
+  margin: 8px 0 12px;
+}
+
+.mvp-card img {
+  display: block;
+  width: 100%;
+  max-width: 190px;
+  max-height: 190px;
+  object-fit: contain;
+  margin: 12px auto;
+  border-radius: 12px;
+}
+
+.mvp-card .mvp-nome {
+  font-size: 18px;
+  font-weight: 800;
+  text-align: center;
+  margin: 10px 0;
+}
+
+.mvp-card .mvp-time,
+.mvp-card .mvp-kills,
+.mvp-card .mvp-data {
+  text-align: center;
+  font-size: 14px;
+  margin: 5px 0;
+}
