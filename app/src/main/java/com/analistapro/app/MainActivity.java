@@ -4,11 +4,16 @@ package com.analistapro.app;
 import android.app.Activity;
 import android.os.Bundle;
 import android.net.Uri;
+import android.graphics.Color;
+import android.view.Gravity;
+import android.view.View;
+import android.widget.Button;
+import android.widget.FrameLayout;
+import android.widget.Toast;
 import android.webkit.WebView;
 import android.webkit.WebViewClient;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebSettings;
-import android.widget.Toast;
 
 import androidx.credentials.CredentialManager;
 import androidx.credentials.GetCredentialRequest;
@@ -33,14 +38,16 @@ public class MainActivity extends Activity {
     private WebView webView;
     private FirebaseAuth auth;
     private boolean loginEmAndamento = false;
-    private String tokenPendente = null;
     private boolean paginaPronta = false;
+    private String tokenPendente = null;
 
     @Override
     protected void onCreate(Bundle state) {
         super.onCreate(state);
 
         auth = FirebaseAuth.getInstance();
+
+        FrameLayout layout = new FrameLayout(this);
 
         webView = new WebView(this);
 
@@ -78,24 +85,76 @@ public class MainActivity extends Activity {
                 WebView view,
                 String url
             ) {
-                paginaPronta = urlPermitida(Uri.parse(url));
+                paginaPronta = urlPermitida(
+                    Uri.parse(url)
+                );
                 entregarToken();
             }
         });
 
-        setContentView(webView);
+        layout.addView(
+            webView,
+            new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                FrameLayout.LayoutParams.MATCH_PARENT
+            )
+        );
+
+        // Botao Google nativo, independente do HTML.
+        Button googleButton = new Button(this);
+        googleButton.setText("Entrar com Google");
+        googleButton.setTextColor(Color.WHITE);
+        googleButton.setBackgroundTintList(
+            android.content.res.ColorStateList.valueOf(
+                Color.rgb(24, 119, 242)
+            )
+        );
+        googleButton.setAllCaps(false);
+
+        FrameLayout.LayoutParams params =
+            new FrameLayout.LayoutParams(
+                FrameLayout.LayoutParams.MATCH_PARENT,
+                dp(52),
+                Gravity.BOTTOM
+            );
+
+        params.setMargins(
+            dp(18), 0, dp(18), dp(28)
+        );
+
+        layout.addView(googleButton, params);
+
+        googleButton.setOnClickListener(
+            v -> loginGoogle()
+        );
+
+        setContentView(layout);
         webView.loadUrl(SITE);
     }
 
+    private int dp(int value) {
+        return (int) (
+            value * getResources()
+                .getDisplayMetrics().density
+        );
+    }
+
     private boolean urlPermitida(Uri uri) {
+        if (uri == null) return false;
+
         String host = uri.getHost();
         String path = uri.getPath();
 
-        return "https".equalsIgnoreCase(uri.getScheme())
-            && "oanalistapro.github.io".equalsIgnoreCase(host)
+        return "https".equalsIgnoreCase(
+                uri.getScheme()
+            )
+            && "oanalistapro.github.io"
+                .equalsIgnoreCase(host)
             && path != null
             && (
-                path.equals("/ANALISTA-PRO.github.io")
+                path.equals(
+                    "/ANALISTA-PRO.github.io"
+                )
                 || path.startsWith(
                     "/ANALISTA-PRO.github.io/"
                 )
@@ -103,23 +162,25 @@ public class MainActivity extends Activity {
     }
 
     private boolean tratarUrl(Uri uri) {
+        if (uri == null) return true;
 
-        if ("analistapro".equals(uri.getScheme())) {
-
-            if ("login".equals(uri.getHost())
-                && urlPermitida(
-                    Uri.parse(webView.getUrl() == null
-                        ? ""
-                        : webView.getUrl())
-                )) {
+        if ("analistapro".equalsIgnoreCase(
+            uri.getScheme()
+        )) {
+            if ("login".equalsIgnoreCase(
+                uri.getHost()
+            ) && urlPermitida(
+                Uri.parse(
+                    webView.getUrl() == null
+                    ? ""
+                    : webView.getUrl()
+                )
+            )) {
                 loginGoogle();
             }
-
             return true;
         }
 
-        // Nao permitir que a WebView navegue
-        // para dominios desconhecidos.
         return !urlPermitida(uri);
     }
 
@@ -137,7 +198,7 @@ public class MainActivity extends Activity {
         if (id == 0) {
             loginEmAndamento = false;
             mostrarErro(
-                "OAuth Google nao configurado no Firebase."
+                "Configure o OAuth Google no Firebase."
             );
             return;
         }
@@ -184,7 +245,8 @@ public class MainActivity extends Activity {
                             (CustomCredential)
                                 response.getCredential();
 
-                        if (!GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
+                        if (!GoogleIdTokenCredential
+                            .TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
                             .equals(custom.getType())) {
                             throw new Exception(
                                 "Tipo de credencial inesperado."
@@ -196,7 +258,8 @@ public class MainActivity extends Activity {
                                 custom.getData()
                             );
 
-                        String idToken = google.getIdToken();
+                        String idToken =
+                            google.getIdToken();
 
                         auth.signInWithCredential(
                             GoogleAuthProvider.getCredential(
@@ -242,28 +305,23 @@ public class MainActivity extends Activity {
         }
 
         String token = tokenPendente;
-        tokenPendente = null;
 
         String script =
-            "(function(token, tentativas) {" +
-            " if (typeof window.__analistaNativeGoogleToken === 'function') {" +
+            "(function(token) {" +
+            " let n = 0;" +
+            " function enviar() {" +
+            "  if (typeof window.__analistaNativeGoogleToken === 'function') {" +
             "   window.__analistaNativeGoogleToken(token);" +
-            " } else if (tentativas < 30) {" +
-            "   setTimeout(function() {" +
-            "     (" +
-            "       function repetir(t, n) {" +
-            "         if (typeof window.__analistaNativeGoogleToken === 'function') {" +
-            "           window.__analistaNativeGoogleToken(t);" +
-            "         } else if (n < 30) {" +
-            "           setTimeout(function() { repetir(t, n + 1); }, 300);" +
-            "         }" +
-            "       }" +
-            "     )(token, tentativas + 1);" +
-            "   }, 300);" +
+            "  } else if (++n < 40) {" +
+            "   setTimeout(enviar, 300);" +
+            "  }" +
             " }" +
-            "})(" + JSONObject.quote(token) + ",0);";
+            " enviar();" +
+            "})(" + JSONObject.quote(token) + ");";
 
         webView.evaluateJavascript(script, null);
+
+        tokenPendente = null;
     }
 
     private void mostrarErro(String mensagem) {
