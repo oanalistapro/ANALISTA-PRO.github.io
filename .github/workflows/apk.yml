@@ -1,5 +1,5 @@
 
-name: GERAR APK ANALISTA PRO GOOGLE
+name: GERAR APK ANALISTA PRO
 
 on:
   workflow_dispatch:
@@ -12,7 +12,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar projeto
+      - name: Baixar arquivos
         uses: actions/checkout@v4
 
       - name: Configurar Java 17
@@ -24,136 +24,242 @@ jobs:
       - name: Configurar Android SDK
         shell: bash
         run: |
-          set -euo pipefail
+          set -e
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          test -d "$SDK"
 
-          SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
-
-          if [ -z "$SDK" ] || [ ! -d "$SDK" ]; then
-            echo "ERRO: Android SDK nao encontrado."
-            exit 1
-          fi
-
-          echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
-          echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
-
-          SDKMANAGER="$SDK/cmdline-tools/latest/bin/sdkmanager"
-
-          if [ ! -x "$SDKMANAGER" ]; then
-            SDKMANAGER=$(find "$SDK/cmdline-tools" \
-              -type f -name sdkmanager | head -n 1)
-          fi
-
-          test -n "$SDKMANAGER"
-          test -x "$SDKMANAGER"
-
-          "$SDKMANAGER" \
-            --sdk_root="$SDK" \
+          "$SDK/cmdline-tools/latest/bin/sdkmanager" \
             "platforms;android-35" \
             "build-tools;35.0.0"
-
-          echo "SDK configurado."
 
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Verificar arquivos Android
+      - name: Criar projeto Android completo
         shell: bash
-        run: |
-          echo "Verificando projeto Android..."
-
-          ARQUIVOS=(
-            "settings.gradle"
-            "build.gradle"
-            "app/build.gradle"
-            "app/google-services.json"
-            "app/src/main/AndroidManifest.xml"
-            "app/src/main/java/com/analistapro/app/MainActivity.java"
-          )
-
-          ERROS=0
-
-          for ARQUIVO in "${ARQUIVOS[@]}"; do
-            if [ -f "$ARQUIVO" ]; then
-              echo "OK: $ARQUIVO"
-            else
-              echo "FALTANDO: $ARQUIVO"
-              ERROS=1
-            fi
-          done
-
-          if [ "$ERROS" -ne 0 ]; then
-            echo "ERRO: Arquivos Android ausentes."
-            exit 1
-          fi
-
-          echo "Todos os arquivos encontrados."
-
-      - name: Restaurar assinatura original
-        shell: bash
-        env:
-          KEYSTORE_BASE64: ${{ secrets.APK_KEYSTORE_BASE64 }}
         run: |
           set -euo pipefail
 
-          test -n "$KEYSTORE_BASE64"
+          mkdir -p androidapk/app/src/main/java/com/analistapro/app
 
-          printf '%s' "$KEYSTORE_BASE64" \
-            | tr -d '\r\n\t ' \
-            | base64 --decode > release.keystore
+          cat > androidapk/settings.gradle <<'EOF'
+          pluginManagement {
+              repositories {
+                  google()
+                  mavenCentral()
+                  gradlePluginPortal()
+              }
+          }
+          dependencyResolutionManagement {
+              repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
+              repositories {
+                  google()
+                  mavenCentral()
+              }
+          }
+          rootProject.name = 'AnalistaPro'
+          include ':app'
+          EOF
 
-          test -s release.keystore
+          cat > androidapk/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application' version '8.7.3' apply false
+          }
+          EOF
 
-          echo "Assinatura restaurada."
+          cat > androidapk/gradle.properties <<'EOF'
+          org.gradle.jvmargs=-Xmx2048m
+          android.useAndroidX=true
+          EOF
 
-      - name: Compilar APK
+          cat > androidapk/app/build.gradle <<'EOF'
+          plugins {
+              id 'com.android.application'
+          }
+
+          android {
+              namespace 'com.analistapro.app'
+              compileSdk 35
+
+              defaultConfig {
+                  applicationId 'com.analistapro.app'
+                  minSdk 24
+                  targetSdk 35
+                  versionCode Integer.parseInt(
+                      System.getenv('GITHUB_RUN_NUMBER') ?: '1'
+                  )
+                  versionName '1.' + (
+                      System.getenv('GITHUB_RUN_NUMBER') ?: '1'
+                  )
+              }
+          }
+
+          dependencies {
+              implementation 'androidx.browser:browser:1.8.0'
+          }
+          EOF
+
+          cat > androidapk/app/src/main/AndroidManifest.xml <<'EOF'
+          <?xml version="1.0" encoding="utf-8"?>
+          <manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+              <uses-permission android:name="android.permission.INTERNET"/>
+
+              <application
+                  android:label="ANALISTA PRO"
+                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                  android:allowBackup="false"
+                  android:usesCleartextTraffic="false">
+
+                  <activity
+                      android:name=".MainActivity"
+                      android:exported="true">
+
+                      <intent-filter>
+                          <action android:name="android.intent.action.MAIN"/>
+                          <category android:name="android.intent.category.LAUNCHER"/>
+                      </intent-filter>
+
+                  </activity>
+              </application>
+          </manifest>
+          EOF
+
+          cat > androidapk/app/src/main/java/com/analistapro/app/MainActivity.java <<'EOF'
+          package com.analistapro.app;
+
+          import android.app.Activity;
+          import android.os.Bundle;
+          import android.content.Intent;
+          import android.net.Uri;
+          import android.graphics.Color;
+          import android.view.Gravity;
+          import android.widget.LinearLayout;
+          import android.widget.TextView;
+          import android.widget.Button;
+          import android.widget.Toast;
+
+          import androidx.browser.customtabs.CustomTabsIntent;
+
+          public class MainActivity extends Activity {
+
+              private static final String SITE =
+                  "https://oanalistapro.github.io/ANALISTA-PRO.github.io/";
+
+              @Override
+              protected void onCreate(Bundle state) {
+                  super.onCreate(state);
+
+                  LinearLayout layout = new LinearLayout(this);
+                  layout.setOrientation(LinearLayout.VERTICAL);
+                  layout.setGravity(Gravity.CENTER);
+                  layout.setPadding(36, 36, 36, 36);
+                  layout.setBackgroundColor(Color.rgb(7, 17, 29));
+
+                  TextView title = new TextView(this);
+                  title.setText("ANALISTA PRO");
+                  title.setTextColor(Color.CYAN);
+                  title.setTextSize(27);
+                  title.setGravity(Gravity.CENTER);
+                  layout.addView(title);
+
+                  TextView info = new TextView(this);
+                  info.setText(
+                      "Gerenciamento de campeonatos"
+                  );
+                  info.setTextColor(Color.WHITE);
+                  info.setGravity(Gravity.CENTER);
+                  info.setPadding(0, 25, 0, 25);
+                  layout.addView(info);
+
+                  Button entrar = new Button(this);
+                  entrar.setText("ABRIR ANALISTA PRO");
+                  entrar.setOnClickListener(v -> abrirSite());
+                  layout.addView(entrar);
+
+                  setContentView(layout);
+
+                  if (state == null) {
+                      abrirSite();
+                  }
+              }
+
+              private void abrirSite() {
+                  Uri url = Uri.parse(SITE);
+
+                  try {
+                      CustomTabsIntent tabs =
+                          new CustomTabsIntent.Builder()
+                              .setShowTitle(false)
+                              .setToolbarColor(
+                                  Color.rgb(7, 17, 29)
+                              )
+                              .build();
+
+                      tabs.launchUrl(this, url);
+
+                  } catch (Exception e) {
+                      try {
+                          startActivity(
+                              new Intent(
+                                  Intent.ACTION_VIEW,
+                                  url
+                              )
+                          );
+                      } catch (Exception ex) {
+                          Toast.makeText(
+                              this,
+                              "Navegador nao encontrado.",
+                              Toast.LENGTH_LONG
+                          ).show();
+                      }
+                  }
+              }
+          }
+          EOF
+
+          echo "Projeto Android criado."
+
+      - name: Compilar APK instalavel
         shell: bash
-        env:
-          APK_STORE_PASSWORD: ${{ secrets.APK_STORE_PASSWORD }}
-          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
-          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
         run: |
           set -euo pipefail
 
-          gradle :app:assembleRelease \
+          cd androidapk
+          gradle :app:assembleDebug \
             --no-daemon \
             --stacktrace
 
-      - name: Preparar APK instalavel
+      - name: Preparar e verificar APK
         shell: bash
         run: |
           set -euo pipefail
 
           mkdir -p dist
 
-          APK=$(find app/build/outputs/apk/release \
-            -maxdepth 1 \
-            -type f \
-            -name '*.apk' \
-            ! -name '*unsigned*' \
-            | head -n 1)
+          cp androidapk/app/build/outputs/apk/debug/app-debug.apk \
+            dist/ANALISTA-PRO.apk
 
-          test -n "$APK"
-          test -s "$APK"
-
-          cp "$APK" dist/ANALISTA-PRO.apk
+          test -s dist/ANALISTA-PRO.apk
 
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" \
             verify --verbose \
             dist/ANALISTA-PRO.apk
 
-          echo "APK validado."
+          echo "APK gerado e assinatura verificada."
+          ls -lh dist/ANALISTA-PRO.apk
 
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
         with:
-          name: ANALISTA-PRO-INSTALAVEL
+          name: ANALISTA-PRO-ANDROID
           path: dist/ANALISTA-PRO.apk
           if-no-files-found: error
           retention-days: 30
 
-      - name: Publicar APK para download
+      - name: Publicar APK no GitHub Releases
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
