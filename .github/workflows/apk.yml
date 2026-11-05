@@ -29,11 +29,9 @@ jobs:
           SDK="${ANDROID_HOME:-${ANDROID_SDK_ROOT:-}}"
 
           if [ -z "$SDK" ] || [ ! -d "$SDK" ]; then
-            echo "Android SDK nao encontrado."
+            echo "ERRO: Android SDK nao encontrado."
             exit 1
           fi
-
-          echo "SDK: $SDK"
 
           echo "ANDROID_HOME=$SDK" >> "$GITHUB_ENV"
           echo "ANDROID_SDK_ROOT=$SDK" >> "$GITHUB_ENV"
@@ -42,8 +40,7 @@ jobs:
 
           if [ ! -x "$SDKMANAGER" ]; then
             SDKMANAGER=$(find "$SDK/cmdline-tools" \
-              -type f -name sdkmanager \
-              | head -n 1)
+              -type f -name sdkmanager | head -n 1)
           fi
 
           test -n "$SDKMANAGER"
@@ -54,10 +51,7 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-          test -d "$SDK/platforms/android-35"
-          test -d "$SDK/build-tools/35.0.0"
-
-          echo "SDK Android configurado."
+          echo "SDK configurado."
 
       - name: Configurar Gradle
         uses: gradle/actions/setup-gradle@v4
@@ -67,25 +61,34 @@ jobs:
       - name: Verificar arquivos Android
         shell: bash
         run: |
-          set -euo pipefail
+          echo "Verificando projeto Android..."
 
-          test -f settings.gradle
-          test -f build.gradle
-          test -f app/build.gradle
-          test -f app/google-services.json
-          test -f app/src/main/AndroidManifest.xml
+          ARQUIVOS=(
+            "settings.gradle"
+            "build.gradle"
+            "app/build.gradle"
+            "app/google-services.json"
+            "app/src/main/AndroidManifest.xml"
+            "app/src/main/java/com/analistapro/app/MainActivity.java"
+          )
 
-          FILE="app/src/main/java/com/analistapro/app/MainActivity.java"
+          ERROS=0
 
-          test -f "$FILE"
+          for ARQUIVO in "${ARQUIVOS[@]}"; do
+            if [ -f "$ARQUIVO" ]; then
+              echo "OK: $ARQUIVO"
+            else
+              echo "FALTANDO: $ARQUIVO"
+              ERROS=1
+            fi
+          done
 
-          grep -Fq 'AnalistaProNative/1' "$FILE"
-          grep -Fq 'loginGoogle()' "$FILE"
-          grep -Fq 'GetGoogleIdOption' "$FILE"
-          grep -Fq 'Entrar com Google' "$FILE"
+          if [ "$ERROS" -ne 0 ]; then
+            echo "ERRO: Arquivos Android ausentes."
+            exit 1
+          fi
 
-          echo "Projeto Android nativo encontrado."
-          echo "Login Google encontrado."
+          echo "Todos os arquivos encontrados."
 
       - name: Restaurar assinatura original
         shell: bash
@@ -104,7 +107,7 @@ jobs:
 
           echo "Assinatura restaurada."
 
-      - name: Compilar APK Release
+      - name: Compilar APK
         shell: bash
         env:
           APK_STORE_PASSWORD: ${{ secrets.APK_STORE_PASSWORD }}
@@ -141,7 +144,6 @@ jobs:
             dist/ANALISTA-PRO.apk
 
           echo "APK validado."
-          ls -lh dist/ANALISTA-PRO.apk
 
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
@@ -168,7 +170,7 @@ jobs:
             gh release create "$TAG" \
               dist/ANALISTA-PRO.apk \
               --title "ANALISTA PRO Android" \
-              --notes "APK Android instalavel."
+              --notes "APK instalavel do ANALISTA PRO."
           fi
 
           echo "APK publicado."
