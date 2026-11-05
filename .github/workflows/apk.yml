@@ -1,5 +1,5 @@
 
-name: GERAR APK ANALISTA PRO NATIVO
+name: GERAR APK ANALISTA PRO GOOGLE NATIVO
 
 on:
   workflow_dispatch:
@@ -15,18 +15,18 @@ jobs:
       - name: Baixar repositorio
         uses: actions/checkout@v4
 
-      - name: Configurar Java 17
+      - name: Java 17
         uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
 
-      - name: Configurar Gradle
+      - name: Gradle
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.9'
 
-      - name: Preparar Android SDK
+      - name: Android SDK
         shell: bash
         run: |
           set -euo pipefail
@@ -34,38 +34,30 @@ jobs:
             "platforms;android-35" \
             "build-tools;35.0.0"
 
-      - name: Preparar assinatura permanente
+      - name: Preparar assinatura
         shell: bash
         env:
-          APK_KEYSTORE_BASE64: ${{ secrets.APK_KEYSTORE_BASE64 }}
-          APK_STORE_PASSWORD: ${{ secrets.APK_STORE_PASSWORD }}
-          APK_KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
-          APK_KEY_PASSWORD: ${{ secrets.APK_KEY_PASSWORD }}
+          KEYSTORE: ${{ secrets.APK_KEYSTORE_BASE64 }}
+          STORE_PASS: ${{ secrets.APK_STORE_PASSWORD }}
+          KEY_ALIAS: ${{ secrets.APK_KEY_ALIAS }}
+          KEY_PASS: ${{ secrets.APK_KEY_PASSWORD }}
         run: |
           set -euo pipefail
-
-          for nome in APK_KEYSTORE_BASE64 APK_STORE_PASSWORD APK_KEY_ALIAS APK_KEY_PASSWORD; do
-            if [[ -z "${!nome}" ]]; then
-              echo "::error::Secret ausente: $nome"
+          for var in KEYSTORE STORE_PASS KEY_ALIAS KEY_PASS; do
+            if [[ -z "${!var}" ]]; then
+              echo "::error::Falta configurar $var"
               exit 1
             fi
           done
-
           mkdir -p "$RUNNER_TEMP/analistapro"
-
-          printf '%s' "$APK_KEYSTORE_BASE64" \
-            | base64 --decode \
+          printf '%s' "$KEYSTORE" | base64 -d \
             > "$RUNNER_TEMP/analistapro/release.jks"
-
           keytool -list \
             -keystore "$RUNNER_TEMP/analistapro/release.jks" \
-            -storepass "$APK_STORE_PASSWORD" \
-            -alias "$APK_KEY_ALIAS" \
-            > /dev/null
+            -storepass "$STORE_PASS" \
+            -alias "$KEY_ALIAS" >/dev/null
 
-          echo "Chave permanente validada."
-
-      - name: Criar projeto Android
+      - name: Criar aplicativo Android
         shell: bash
         env:
           GOOGLE_WEB_CLIENT_ID: ${{ secrets.GOOGLE_WEB_CLIENT_ID }}
@@ -73,7 +65,7 @@ jobs:
           set -euo pipefail
 
           if [[ -z "$GOOGLE_WEB_CLIENT_ID" ]]; then
-            echo "::error::GOOGLE_WEB_CLIENT_ID ausente."
+            echo "::error::Falta GOOGLE_WEB_CLIENT_ID"
             exit 1
           fi
 
@@ -88,7 +80,6 @@ jobs:
                   gradlePluginPortal()
               }
           }
-
           dependencyResolutionManagement {
               repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
               repositories {
@@ -96,7 +87,6 @@ jobs:
                   mavenCentral()
               }
           }
-
           rootProject.name = 'AnalistaPro'
           include ':app'
           EOF
@@ -151,16 +141,14 @@ jobs:
           }
 
           dependencies {
-              implementation 'androidx.credentials:credentials:1.3.0'
-              implementation 'androidx.credentials:credentials-play-services-auth:1.3.0'
-              implementation 'com.google.android.libraries.identity.googleid:googleid:1.1.1'
+              implementation 'com.google.android.gms:play-services-auth:21.3.0'
           }
           EOF
 
           cat > androidapk/app/src/main/res/values/strings.xml <<EOF
           <resources>
-              <string name="app_name">ANALISTA PRO</string>
-              <string name="google_web_client_id">${GOOGLE_WEB_CLIENT_ID}</string>
+            <string name="app_name">ANALISTA PRO</string>
+            <string name="google_web_client_id">${GOOGLE_WEB_CLIENT_ID}</string>
           </resources>
           EOF
 
@@ -168,26 +156,26 @@ jobs:
           <?xml version="1.0" encoding="utf-8"?>
           <manifest xmlns:android="http://schemas.android.com/apk/res/android">
 
-              <uses-permission android:name="android.permission.INTERNET"/>
+            <uses-permission android:name="android.permission.INTERNET"/>
 
-              <application
-                  android:label="@string/app_name"
-                  android:theme="@android:style/Theme.Material.Light.NoActionBar"
-                  android:usesCleartextTraffic="false"
-                  android:allowBackup="false">
+            <application
+                android:label="@string/app_name"
+                android:theme="@android:style/Theme.Material.Light.NoActionBar"
+                android:usesCleartextTraffic="false"
+                android:allowBackup="false">
 
-                  <activity
-                      android:name=".MainActivity"
-                      android:exported="true"
-                      android:windowSoftInputMode="adjustResize">
+              <activity
+                  android:name=".MainActivity"
+                  android:exported="true"
+                  android:windowSoftInputMode="adjustResize">
 
-                      <intent-filter>
-                          <action android:name="android.intent.action.MAIN"/>
-                          <category android:name="android.intent.category.LAUNCHER"/>
-                      </intent-filter>
+                <intent-filter>
+                  <action android:name="android.intent.action.MAIN"/>
+                  <category android:name="android.intent.category.LAUNCHER"/>
+                </intent-filter>
 
-                  </activity>
-              </application>
+              </activity>
+            </application>
           </manifest>
           EOF
 
@@ -208,28 +196,22 @@ jobs:
           import android.webkit.WebSettings;
           import android.webkit.JavascriptInterface;
 
-          import androidx.credentials.CredentialManager;
-          import androidx.credentials.GetCredentialRequest;
-          import androidx.credentials.GetCredentialResponse;
-          import androidx.credentials.Credential;
-          import androidx.credentials.CustomCredential;
-          import androidx.credentials.exceptions.GetCredentialException;
-          import androidx.credentials.exceptions.NoCredentialException;
-
-          import com.google.android.libraries.identity.googleid.GetGoogleIdOption;
-          import com.google.android.libraries.identity.googleid.GoogleIdTokenCredential;
-
-          import java.util.concurrent.ExecutorService;
-          import java.util.concurrent.Executors;
+          import com.google.android.gms.auth.api.signin.GoogleSignIn;
+          import com.google.android.gms.auth.api.signin.GoogleSignInAccount;
+          import com.google.android.gms.auth.api.signin.GoogleSignInClient;
+          import com.google.android.gms.auth.api.signin.GoogleSignInOptions;
+          import com.google.android.gms.common.api.ApiException;
+          import com.google.android.gms.tasks.Task;
 
           public class MainActivity extends Activity {
 
               private static final String URL =
-                  "https://oanalistapro.github.io/ANALISTA-PRO.github.io/";
+                "https://oanalistapro.github.io/ANALISTA-PRO.github.io/";
+
+              private static final int GOOGLE_REQUEST = 7101;
 
               private WebView web;
-              private final ExecutorService executor =
-                  Executors.newSingleThreadExecutor();
+              private GoogleSignInClient googleClient;
 
               @Override
               public void onCreate(Bundle savedInstanceState) {
@@ -237,6 +219,18 @@ jobs:
 
                   getWindow().setStatusBarColor(Color.rgb(7,16,26));
                   getWindow().setNavigationBarColor(Color.rgb(7,16,26));
+
+                  GoogleSignInOptions options =
+                    new GoogleSignInOptions.Builder(
+                      GoogleSignInOptions.DEFAULT_SIGN_IN
+                    )
+                    .requestEmail()
+                    .requestIdToken(
+                      getString(R.string.google_web_client_id)
+                    )
+                    .build();
+
+                  googleClient = GoogleSignIn.getClient(this, options);
 
                   web = new WebView(this);
                   web.setBackgroundColor(Color.rgb(7,16,26));
@@ -249,55 +243,54 @@ jobs:
                   settings.setAllowContentAccess(false);
 
                   settings.setUserAgentString(
-                      settings.getUserAgentString()
-                      + " AnalistaProNative/1"
+                    settings.getUserAgentString()
+                    + " AnalistaProNative/1"
                   );
 
                   web.setWebChromeClient(new WebChromeClient());
 
                   web.setWebViewClient(new WebViewClient() {
-                      @Override
-                      public boolean shouldOverrideUrlLoading(
-                          WebView view,
-                          android.webkit.WebResourceRequest request
-                      ) {
-                          Uri uri = request.getUrl();
+                    @Override
+                    public boolean shouldOverrideUrlLoading(
+                      WebView view,
+                      android.webkit.WebResourceRequest request
+                    ) {
+                      Uri uri = request.getUrl();
 
-                          if ("analistapro".equals(uri.getScheme())) {
-                              if ("login".equals(uri.getHost())) {
-                                  googleLogin();
-                              }
-                              return true;
-                          }
-
-                          if ("https".equals(uri.getScheme())
-                              && "oanalistapro.github.io".equals(uri.getHost())) {
-                              return false;
-                          }
-
-                          try {
-                              startActivity(
-                                  new Intent(Intent.ACTION_VIEW, uri)
-                              );
-                          } catch (Exception ignored) {}
-
-                          return true;
+                      if ("analistapro".equals(uri.getScheme())) {
+                        if ("login".equals(uri.getHost())) {
+                          iniciarGoogle();
+                        }
+                        return true;
                       }
+
+                      if ("https".equals(uri.getScheme())
+                          && "oanalistapro.github.io".equals(uri.getHost())) {
+                        return false;
+                      }
+
+                      try {
+                        startActivity(
+                          new Intent(Intent.ACTION_VIEW, uri)
+                        );
+                      } catch (Exception ignored) {}
+
+                      return true;
+                    }
                   });
 
                   web.addJavascriptInterface(
-                      new NativeBridge(),
-                      "AnalistaAndroid"
+                    new NativeBridge(),
+                    "AnalistaAndroid"
                   );
 
                   FrameLayout root = new FrameLayout(this);
-
                   root.addView(
-                      web,
-                      new FrameLayout.LayoutParams(
-                          ViewGroup.LayoutParams.MATCH_PARENT,
-                          ViewGroup.LayoutParams.MATCH_PARENT
-                      )
+                    web,
+                    new FrameLayout.LayoutParams(
+                      ViewGroup.LayoutParams.MATCH_PARENT,
+                      ViewGroup.LayoutParams.MATCH_PARENT
+                    )
                   );
 
                   setContentView(root);
@@ -307,170 +300,179 @@ jobs:
               public class NativeBridge {
                   @JavascriptInterface
                   public void loginGoogle() {
-                      runOnUiThread(() -> googleLogin());
+                    runOnUiThread(() -> iniciarGoogle());
                   }
 
                   @JavascriptInterface
                   public void openExternal(String url) {
-                      runOnUiThread(() -> {
-                          try {
-                              Uri uri = Uri.parse(url);
-                              if (!"https".equals(uri.getScheme())) return;
-                              startActivity(
-                                  new Intent(Intent.ACTION_VIEW, uri)
-                              );
-                          } catch (Exception ignored) {}
-                      });
+                    runOnUiThread(() -> {
+                      try {
+                        Uri uri = Uri.parse(url);
+                        if (!"https".equals(uri.getScheme())) return;
+                        startActivity(
+                          new Intent(Intent.ACTION_VIEW, uri)
+                        );
+                      } catch (Exception ignored) {}
+                    });
                   }
               }
 
-              private void googleLogin() {
-                  try {
-                      GetGoogleIdOption option =
-                          new GetGoogleIdOption.Builder()
-                              .setFilterByAuthorizedAccounts(false)
-                              .setServerClientId(
-                                  getString(R.string.google_web_client_id)
-                              )
-                              .setAutoSelectEnabled(false)
-                              .build();
+              private void iniciarGoogle() {
+                if (!paginaOficial()) {
+                  mostrarErro("Abra a pagina oficial do ANALISTA PRO.");
+                  return;
+                }
 
-                      GetCredentialRequest request =
-                          new GetCredentialRequest.Builder()
-                              .addCredentialOption(option)
-                              .build();
-
-                      CredentialManager manager =
-                          CredentialManager.create(this);
-
-                      manager.getCredentialAsync(
-                          this,
-                          request,
-                          null,
-                          executor,
-                          new androidx.credentials.CredentialManagerCallback<
-                              GetCredentialResponse,
-                              GetCredentialException
-                          >() {
-                              @Override
-                              public void onResult(GetCredentialResponse response) {
-                                  try {
-                                      Credential credential =
-                                          response.getCredential();
-
-                                      if (!(credential instanceof CustomCredential)) {
-                                          throw new Exception(
-                                              "Tipo de credencial nao suportado"
-                                          );
-                                      }
-
-                                      CustomCredential custom =
-                                          (CustomCredential) credential;
-
-                                      if (!GoogleIdTokenCredential.TYPE_GOOGLE_ID_TOKEN_CREDENTIAL
-                                          .equals(custom.getType())) {
-                                          throw new Exception(
-                                              "Credencial Google invalida"
-                                          );
-                                      }
-
-                                      GoogleIdTokenCredential google =
-                                          GoogleIdTokenCredential.createFrom(
-                                              custom.getData()
-                                          );
-
-                                      String token = google.getIdToken();
-
-                                      runOnUiThread(() -> {
-                                          String escaped =
-                                              org.json.JSONObject.quote(token);
-
-                                          web.evaluateJavascript(
-                                              "(function(){"
-                                              + "if(typeof window.__analistaNativeGoogleToken==='function'){"
-                                              + "window.__analistaNativeGoogleToken("
-                                              + escaped
-                                              + ");return 'OK';}"
-                                              + "return 'BRIDGE_AUSENTE';"
-                                              + "})()",
-                                              result -> {
-                                                  if ("\"BRIDGE_AUSENTE\"".equals(result)) {
-                                                      showError(
-                                                          "O site precisa receber o token Google nativo."
-                                                      );
-                                                  }
-                                              }
-                                          );
-                                      });
-
-                                  } catch (Exception e) {
-                                      showError(
-                                          "Erro na credencial: " + e.getMessage()
-                                      );
-                                  }
-                              }
-
-                              @Override
-                              public void onError(GetCredentialException e) {
-                                  android.util.Log.e(
-                                      "AnalistaGoogle",
-                                      "Falha Credential Manager: "
-                                      + e.getClass().getSimpleName(),
-                                      e
-                                  );
-
-                                  if (e instanceof NoCredentialException) {
-                                      showError(
-                                          "Google nao encontrou credenciais. "
-                                          + "Verifique a conta Google, Play Services "
-                                          + "e o OAuth Android."
-                                      );
-                                  } else {
-                                      showError(
-                                          "Google: "
-                                          + e.getClass().getSimpleName()
-                                          + " - "
-                                          + e.getMessage()
-                                      );
-                                  }
-                              }
-                          }
+                try {
+                  // Limpa a selecao nativa anterior para
+                  // permitir escolher outra conta Google.
+                  googleClient.signOut().addOnCompleteListener(this, task -> {
+                    try {
+                      Intent intent = googleClient.getSignInIntent();
+                      startActivityForResult(intent, GOOGLE_REQUEST);
+                    } catch (Exception e) {
+                      mostrarErro(
+                        "Nao foi possivel abrir o Google: "
+                        + e.getMessage()
                       );
-
-                  } catch (Exception e) {
-                      showError("Erro ao iniciar Google: " + e.getMessage());
-                  }
+                    }
+                  });
+                } catch (Exception e) {
+                  mostrarErro(
+                    "Falha ao iniciar Google: " + e.getMessage()
+                  );
+                }
               }
 
-              private void showError(String message) {
-                  runOnUiThread(() ->
-                      Toast.makeText(
-                          this,
-                          message,
-                          Toast.LENGTH_LONG
-                      ).show()
+              @Override
+              protected void onActivityResult(
+                int requestCode,
+                int resultCode,
+                Intent data
+              ) {
+                super.onActivityResult(
+                  requestCode,
+                  resultCode,
+                  data
+                );
+
+                if (requestCode != GOOGLE_REQUEST) return;
+
+                try {
+                  Task<GoogleSignInAccount> task =
+                    GoogleSignIn.getSignedInAccountFromIntent(data);
+
+                  GoogleSignInAccount account =
+                    task.getResult(ApiException.class);
+
+                  if (account == null || account.getIdToken() == null) {
+                    mostrarErro("Google nao retornou um token valido.");
+                    return;
+                  }
+
+                  enviarTokenParaSite(account.getIdToken());
+
+                } catch (ApiException e) {
+                  int status = e.getStatusCode();
+
+                  android.util.Log.e(
+                    "AnalistaGoogle",
+                    "Falha Google Sign-In: " + status,
+                    e
                   );
+
+                  if (status == 12501) {
+                    mostrarErro("Login Google cancelado.");
+                  } else if (status == 10 || status == 12500) {
+                    mostrarErro(
+                      "Google OAuth erro " + status
+                      + ". Confira SHA-1, pacote Android "
+                      + "e GOOGLE_WEB_CLIENT_ID."
+                    );
+                  } else {
+                    mostrarErro(
+                      "Falha Google. Codigo: " + status
+                    );
+                  }
+                } catch (Exception e) {
+                  mostrarErro(
+                    "Erro no retorno Google: " + e.getMessage()
+                  );
+                }
+              }
+
+              private boolean paginaOficial() {
+                if (web == null) return false;
+                try {
+                  Uri uri = Uri.parse(web.getUrl());
+                  return "https".equals(uri.getScheme())
+                    && "oanalistapro.github.io".equals(uri.getHost())
+                    && uri.getPath() != null
+                    && uri.getPath().startsWith(
+                      "/ANALISTA-PRO.github.io/"
+                    );
+                } catch (Exception e) {
+                  return false;
+                }
+              }
+
+              private void enviarTokenParaSite(String token) {
+                if (!paginaOficial()) {
+                  mostrarErro("Pagina nao autorizada.");
+                  return;
+                }
+
+                String escaped = org.json.JSONObject.quote(token);
+
+                web.evaluateJavascript(
+                  "(function(){"
+                  + "if(typeof window.__analistaNativeGoogleToken"
+                  + "==='function'){"
+                  + "window.__analistaNativeGoogleToken("
+                  + escaped
+                  + ");return 'OK';}"
+                  + "return 'BRIDGE_AUSENTE';"
+                  + "})()",
+                  result -> {
+                    if ("\"BRIDGE_AUSENTE\"".equals(result)) {
+                      mostrarErro(
+                        "Funcao de login Firebase nao encontrada."
+                      );
+                    }
+                  }
+                );
+              }
+
+              private void mostrarErro(String mensagem) {
+                runOnUiThread(() ->
+                  Toast.makeText(
+                    this,
+                    mensagem,
+                    Toast.LENGTH_LONG
+                  ).show()
+                );
               }
 
               @Override
               public void onBackPressed() {
-                  if (web != null && web.canGoBack()) {
-                      web.goBack();
-                  } else {
-                      super.onBackPressed();
-                  }
+                if (web != null && web.canGoBack()) {
+                  web.goBack();
+                } else {
+                  super.onBackPressed();
+                }
               }
 
               @Override
               protected void onDestroy() {
-                  executor.shutdown();
-                  if (web != null) web.destroy();
-                  super.onDestroy();
+                if (web != null) {
+                  web.destroy();
+                }
+                super.onDestroy();
               }
           }
           EOF
 
-      - name: Compilar APK release
+      - name: Compilar APK
         shell: bash
         env:
           APK_KEYSTORE_PATH: ${{ runner.temp }}/analistapro/release.jks
@@ -488,7 +490,6 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           mkdir -p dist
 
           cp androidapk/app/build/outputs/apk/release/app-release.apk \
@@ -502,22 +503,16 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
-          echo "===== ASSINATURA PERMANENTE ====="
-
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" \
             verify --print-certs \
             dist/ANALISTA-PRO.apk
 
-          echo "===== FIM ====="
-
       - name: Disponibilizar APK
         uses: actions/upload-artifact@v4
         with:
-          name: ANALISTA-PRO-RELEASE
+          name: ANALISTA-PRO-GOOGLE
           path: dist/ANALISTA-PRO.apk
           if-no-files-found: error
-          retention-days: 30
 
       - name: Publicar APK
         shell: bash
@@ -525,7 +520,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           set -euo pipefail
-
           TAG="analista-pro-android"
 
           if gh release view "$TAG" >/dev/null 2>&1; then
@@ -536,7 +530,5 @@ jobs:
             gh release create "$TAG" \
               dist/ANALISTA-PRO.apk \
               --title "ANALISTA PRO Android" \
-              --notes "APK Android com assinatura permanente."
+              --notes "APK com Google Sign-In nativo."
           fi
-
-          echo "APK publicado com sucesso."
