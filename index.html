@@ -4353,6 +4353,38 @@ btn.addEventListener("click",async()=>{
 });
 
 document.body.appendChild(btn);
+
+<!-- BOTÃO CONECTAR CENTRAL ADM -->
+<button
+  id="conectarCentralADM"
+  type="button"
+  style="
+    position:fixed;
+    bottom:85px;
+    right:12px;
+    z-index:99999;
+    padding:14px 18px;
+    background:#2563eb;
+    color:white;
+    border:1px solid #60a5fa;
+    border-radius:14px;
+    font-weight:bold;
+    cursor:pointer;
+    box-shadow:0 6px 25px #0008;
+  "
+>
+  🔗 Conectar Central ADM
+</button>
+
+<script>
+document.getElementById("conectarCentralADM")
+  .addEventListener("click",()=>{
+    alert(
+      "Botão instalado. Agora falta conectar " +
+      "a autenticação e o envio de dados à Central ADM."
+    );
+  });
 </script>
+
 
 </body></html>
