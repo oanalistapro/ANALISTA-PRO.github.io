@@ -1,0 +1,33 @@
+
+name: Sincronizar ANALISTA PRO com CENTRAL ADM
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/30 * * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  sincronizar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Baixar repositório
+        uses: actions/checkout@v4
+
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Instalar Firebase Admin
+        run: npm install --no-save firebase-admin@13
+
+      - name: Sincronizar dados
+        env:
+          FIREBASE_ANALISTA_ADMIN: ${{ secrets.FIREBASE_ANALISTA_ADMIN }}
+          FIREBASE_CENTRAL_ADMIN: ${{ secrets.FIREBASE_CENTRAL_ADMIN }}
+        run: node scripts/sincronizar-central.cjs
