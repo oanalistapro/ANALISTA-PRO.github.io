@@ -1,5 +1,5 @@
 
-name: Corrigir integração CENTRAL ADM
+name: Corrigir CENTRAL ADM no ANALISTA PRO
 
 on:
   workflow_dispatch:
@@ -12,44 +12,200 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Baixar repositório
+      - name: Baixar repositorio
         uses: actions/checkout@v4
 
-      - name: Corrigir botão e integração
+      - name: Corrigir HTML e integrar Central ADM
         shell: bash
         run: |
           python3 - <<'PY'
           from pathlib import Path
 
-          p = Path("index.html")
-          html = p.read_text(encoding="utf-8")
+          arquivo = Path("index.html")
+
+          if not arquivo.exists():
+              raise SystemExit("index.html nao encontrado")
+
+          html = arquivo.read_text(encoding="utf-8")
 
           marcador = "<!-- INTEGRAÇÃO ANALISTA PRO → CENTRAL ADM -->"
 
-          if marcador not in html:
+          if marcador in html:
+              html = html.split(marcador, 1)[0]
+          else:
+              pos = html.lower().rfind("</body>")
+              if pos < 0:
+                  raise SystemExit(
+                      "Fim do HTML nao encontrado. "
+                      "Arquivo original preservado."
+                  )
+              html = html[:pos]
+
+          # Corrige STYLE aberto, que escondia o botao.
+          abertos = html.lower().count("<style")
+          fechados = html.lower().count("</style>")
+
+          if abertos == fechados + 1:
+              html += "\n</style>\n"
+          elif abertos != fechados:
               raise SystemExit(
-                  "Integração não encontrada. "
-                  "Nenhuma alteração foi realizada."
+                  "Estrutura CSS inesperada. "
+                  "Nenhuma alteracao foi publicada."
               )
 
-          inicio = html.index(marcador)
+          integracao = r"""
+          <!-- INTEGRAÇÃO ANALISTA PRO → CENTRAL ADM -->
+          <button
+            id="conectarCentralADM"
+            type="button"
+            style="position:fixed;right:12px;bottom:85px;
+            z-index:999999;background:#2563eb;color:white;
+            border:1px solid #60a5fa;border-radius:12px;
+            padding:13px 17px;font-weight:800;cursor:pointer;
+            box-shadow:0 6px 25px #0008"
+          >🔗 Conectar Central ADM</button>
 
-          # Preserva todas as funções anteriores.
-          html = html[:inicio]
+          <script type="module">
+          import {initializeApp,getApps}
+          from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
 
-          integracao = Path("central-adm.html")
+          import {
+            getAuth,
+            GoogleAuthProvider,
+            signInWithPopup,
+            signInWithRedirect,
+            getRedirectResult
+          } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
 
-          if not integracao.exists():
-              raise SystemExit(
-                  "Arquivo central-adm.html não encontrado."
-              )
+          import {
+            getFirestore,
+            doc,
+            getDoc,
+            addDoc,
+            collection,
+            serverTimestamp
+          } from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
 
-          html += integracao.read_text(encoding="utf-8")
-          p.write_text(html, encoding="utf-8")
-          print("Integração corrigida.")
+          const config={
+            apiKey:"AIzaSyATpHc54WPjdcixEvGaEa7Cupwn1BMCdAs",
+            authDomain:"central-adm-f9b27.firebaseapp.com",
+            projectId:"central-adm-f9b27",
+            storageBucket:"central-adm-f9b27.firebasestorage.app",
+            messagingSenderId:"801405753910",
+            appId:"1:801405753910:web:11680618a76c31e4091697"
+          };
+
+          const app=getApps().find(a=>a.name==="central-sync")
+            ||initializeApp(config,"central-sync");
+
+          const auth=getAuth(app);
+          const db=getFirestore(app);
+          const btn=document.getElementById("conectarCentralADM");
+
+          async function enviar(user){
+            const snap=await getDoc(
+              doc(db,"admins",user.uid)
+            );
+
+            if(!snap.exists()){
+              throw Error("Documento ADM nao encontrado.");
+            }
+
+            const dados=snap.data();
+
+            if(dados.active!==true && dados.ative!==true){
+              throw Error("ADM nao autorizado.");
+            }
+
+            await addDoc(
+              collection(db,"portalEvents"),
+              {
+                portal:"analista",
+                action:"integration_test",
+                details:"Teste da integracao ANALISTA PRO",
+                uid:user.uid,
+                userEmail:user.email||"",
+                createdAt:serverTimestamp()
+              }
+            );
+
+            btn.textContent="✓ Central conectada";
+            alert("Teste enviado para a Central ADM!");
+          }
+
+          btn.addEventListener("click",async()=>{
+            btn.disabled=true;
+            btn.textContent="Conectando...";
+
+            try{
+              let user=auth.currentUser;
+
+              if(!user){
+                try{
+                  user=(
+                    await signInWithPopup(
+                      auth,new GoogleAuthProvider()
+                    )
+                  ).user;
+                }catch(e){
+                  if(
+                    e.code==="auth/popup-blocked"||
+                    e.code==="auth/operation-not-supported-in-this-environment"
+                  ){
+                    await signInWithRedirect(
+                      auth,new GoogleAuthProvider()
+                    );
+                    return;
+                  }
+                  throw e;
+                }
+              }
+
+              await enviar(user);
+
+            }catch(e){
+              console.error(e);
+              alert("Erro: "+(e.code||e.message));
+              btn.textContent="🔗 Conectar Central ADM";
+            }finally{
+              btn.disabled=false;
+            }
+          });
+
+          getRedirectResult(auth)
+            .then(async result=>{
+              if(result?.user)await enviar(result.user);
+            })
+            .catch(e=>{
+              console.error("Retorno Google:",e);
+            });
+          </script>
+          </body>
+          </html>
+          """
+
+          html += "\n" + integracao
+
+          arquivo.write_text(html,encoding="utf-8")
+
+          print("HTML corrigido com sucesso")
+          print("Tamanho:",len(html),"caracteres")
           PY
 
-      - name: Publicar correção
+      - name: Verificar integracao
+        shell: bash
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          s=Path("index.html").read_text(encoding="utf-8")
+          assert s.count('id="conectarCentralADM"') == 1
+          assert s.lower().count("<style") == s.lower().count("</style>")
+          assert s.lower().count("<script") == s.lower().count("</script>")
+          assert s.strip().endswith("</html>")
+          print("Verificacoes basicas aprovadas")
+          PY
+
+      - name: Publicar correcao
         shell: bash
         run: |
           git config user.name "github-actions[bot]"
@@ -59,8 +215,8 @@ jobs:
           git add index.html
 
           if git diff --cached --quiet; then
-            echo "Nenhuma alteração."
+            echo "Nenhuma alteracao necessaria"
           else
-            git commit -m "Corrigir integração Central ADM"
+            git commit -m "Corrigir botao Central ADM"
             git push
           fi
