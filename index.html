@@ -4223,34 +4223,135 @@ body.ap-native-installed #downloadApkBtn,body.ap-native-installed #downloadApkIn
 #ppMvpCards .apMvpPremium *,.ppSite .apMvpPremium *{text-align:left!important}
 @media(max-width:420px){#ppMvpCards>.apMvpPremium,.ppSite .apMvpPremium{grid-template-columns:74px minmax(0,1fr)!important;gap:3px 10px!important;padding:18px 10px 10px!important}#ppMvpCards .apMvpPortrait,.ppSite .apMvpPremium .apMvpPortrait,#ppMvpCards img.apMvpPortrait{width:74px!important;height:74px!important;min-width:74px!important;min-height:74px!important;max-width:74px!important;max-height:74px!important}#ppMvpCards .apMvpPremium>h3{font-size:16px!important}}
 
+
+</style>
+
+
 <!-- INTEGRAÇÃO ANALISTA PRO → CENTRAL ADM -->
-<button id="conectarCentralADM" type="button" style="position:fixed;right:12px;bottom:80px;z-index:99999;background:#2563eb;color:#fff;border:1px solid #60a5fa;border-radius:12px;padding:12px 16px;font-weight:800;cursor:pointer;box-shadow:0 6px 22px #0007">🔗 Conectar Central ADM</button>
+<button
+  id="conectarCentralADM"
+  type="button"
+  style="position:fixed;right:12px;bottom:85px;
+  z-index:999999;background:#2563eb;color:white;
+  border:1px solid #60a5fa;border-radius:12px;
+  padding:13px 17px;font-weight:800;cursor:pointer;
+  box-shadow:0 6px 25px #0008"
+>🔗 Conectar Central ADM</button>
+
 <script type="module">
-import {initializeApp,getApps} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js';
-import {getAuth,GoogleAuthProvider,signInWithPopup,signInWithRedirect,getRedirectResult} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js';
-import {getFirestore,doc,getDoc,addDoc,collection,serverTimestamp} from 'https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js';
-const config={apiKey:'AIzaSyATpHc54WPjdcixEvGaEa7Cupwn1BMCdAs',authDomain:'central-adm-f9b27.firebaseapp.com',projectId:'central-adm-f9b27',storageBucket:'central-adm-f9b27.firebasestorage.app',messagingSenderId:'801405753910',appId:'1:801405753910:web:11680618a76c31e4091697'};
-const app=getApps().find(a=>a.name==='central-sync')||initializeApp(config,'central-sync');
-const auth=getAuth(app),db=getFirestore(app),button=document.getElementById('conectarCentralADM');
-async function sendTest(user){
-  const snap=await getDoc(doc(db,'admins',user.uid));
-  if(!snap.exists()||(snap.data().active!==true&&snap.data().ative!==true))throw Error('Conta sem autorização ADM na Central.');
-  await addDoc(collection(db,'portalEvents'),{portal:'analista',action:'integration_test',details:'Teste da integração ANALISTA PRO',uid:user.uid,userEmail:user.email||'',createdAt:serverTimestamp()});
-  button.textContent='✓ Teste enviado à Central';
-  alert('Teste enviado. Confira Atividades na Central ADM.');
+import {initializeApp,getApps}
+from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup,
+  signInWithRedirect,
+  getRedirectResult
+} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  addDoc,
+  collection,
+  serverTimestamp
+} from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+
+const config={
+  apiKey:"AIzaSyATpHc54WPjdcixEvGaEa7Cupwn1BMCdAs",
+  authDomain:"central-adm-f9b27.firebaseapp.com",
+  projectId:"central-adm-f9b27",
+  storageBucket:"central-adm-f9b27.firebasestorage.app",
+  messagingSenderId:"801405753910",
+  appId:"1:801405753910:web:11680618a76c31e4091697"
+};
+
+const app=getApps().find(a=>a.name==="central-sync")
+  ||initializeApp(config,"central-sync");
+
+const auth=getAuth(app);
+const db=getFirestore(app);
+const btn=document.getElementById("conectarCentralADM");
+
+async function enviar(user){
+  const snap=await getDoc(
+    doc(db,"admins",user.uid)
+  );
+
+  if(!snap.exists()){
+    throw Error("Documento ADM nao encontrado.");
+  }
+
+  const dados=snap.data();
+
+  if(dados.active!==true && dados.ative!==true){
+    throw Error("ADM nao autorizado.");
+  }
+
+  await addDoc(
+    collection(db,"portalEvents"),
+    {
+      portal:"analista",
+      action:"integration_test",
+      details:"Teste da integracao ANALISTA PRO",
+      uid:user.uid,
+      userEmail:user.email||"",
+      createdAt:serverTimestamp()
+    }
+  );
+
+  btn.textContent="✓ Central conectada";
+  alert("Teste enviado para a Central ADM!");
 }
-button.addEventListener('click',async()=>{
-  button.disabled=true;button.textContent='Conectando...';
+
+btn.addEventListener("click",async()=>{
+  btn.disabled=true;
+  btn.textContent="Conectando...";
+
   try{
     let user=auth.currentUser;
+
     if(!user){
-      try{user=(await signInWithPopup(auth,new GoogleAuthProvider())).user;}
-      catch(e){if(['auth/popup-blocked','auth/operation-not-supported-in-this-environment'].includes(e.code)){await signInWithRedirect(auth,new GoogleAuthProvider());return;}throw e;}
+      try{
+        user=(
+          await signInWithPopup(
+            auth,new GoogleAuthProvider()
+          )
+        ).user;
+      }catch(e){
+        if(
+          e.code==="auth/popup-blocked"||
+          e.code==="auth/operation-not-supported-in-this-environment"
+        ){
+          await signInWithRedirect(
+            auth,new GoogleAuthProvider()
+          );
+          return;
+        }
+        throw e;
+      }
     }
-    await sendTest(user);
-  }catch(e){console.error('Central ADM:',e);alert('Falha ao conectar: '+(e.code||e.message));button.textContent='🔗 Conectar Central ADM';}
-  finally{button.disabled=false;}
+
+    await enviar(user);
+
+  }catch(e){
+    console.error(e);
+    alert("Erro: "+(e.code||e.message));
+    btn.textContent="🔗 Conectar Central ADM";
+  }finally{
+    btn.disabled=false;
+  }
 });
-getRedirectResult(auth).then(result=>{if(result?.user)return sendTest(result.user);}).catch(e=>{console.error(e);alert('Falha no retorno Google: '+(e.code||e.message));});
+
+getRedirectResult(auth)
+  .then(async result=>{
+    if(result?.user)await enviar(result.user);
+  })
+  .catch(e=>{
+    console.error("Retorno Google:",e);
+  });
 </script>
-</body></html>
+</body>
+</html>
