@@ -4222,5 +4222,137 @@ body.ap-native-installed #downloadApkBtn,body.ap-native-installed #downloadApkIn
 #ppMvpCards .apMvpKills,.ppSite .apMvpPremium .apMvpKills{grid-column:2!important;grid-row:5!important;font-size:16px!important;font-weight:900!important;color:#ffcf65!important;text-align:left!important}
 #ppMvpCards .apMvpPremium *,.ppSite .apMvpPremium *{text-align:left!important}
 @media(max-width:420px){#ppMvpCards>.apMvpPremium,.ppSite .apMvpPremium{grid-template-columns:74px minmax(0,1fr)!important;gap:3px 10px!important;padding:18px 10px 10px!important}#ppMvpCards .apMvpPortrait,.ppSite .apMvpPremium .apMvpPortrait,#ppMvpCards img.apMvpPortrait{width:74px!important;height:74px!important;min-width:74px!important;min-height:74px!important;max-width:74px!important;max-height:74px!important}#ppMvpCards .apMvpPremium>h3{font-size:16px!important}}
-</style>
+
+<!-- INTEGRAÇÃO ANALISTA PRO → CENTRAL ADM -->
+<script type="module">
+import {initializeApp,getApps}
+from "https://www.gstatic.com/firebasejs/11.10.0/firebase-app.js";
+
+import {
+  getAuth,
+  GoogleAuthProvider,
+  signInWithPopup
+}
+from "https://www.gstatic.com/firebasejs/11.10.0/firebase-auth.js";
+
+import {
+  getFirestore,
+  doc,
+  getDoc,
+  addDoc,
+  collection,
+  serverTimestamp
+}
+from "https://www.gstatic.com/firebasejs/11.10.0/firebase-firestore.js";
+
+const centralConfig={
+  apiKey:"AIzaSyATpHc54WPjdcixEvGaEa7Cupwn1BMCdAs",
+  authDomain:"central-adm-f9b27.firebaseapp.com",
+  projectId:"central-adm-f9b27",
+  storageBucket:"central-adm-f9b27.firebasestorage.app",
+  messagingSenderId:"801405753910",
+  appId:"1:801405753910:web:11680618a76c31e4091697"
+};
+
+const centralApp=
+  getApps().find(app=>app.name==="central-sync")||
+  initializeApp(centralConfig,"central-sync");
+
+const centralAuth=getAuth(centralApp);
+const centralDB=getFirestore(centralApp);
+
+async function conectarAnalistaCentral(){
+  const provider=new GoogleAuthProvider();
+
+  const result=centralAuth.currentUser
+    ?{user:centralAuth.currentUser}
+    :await signInWithPopup(centralAuth,provider);
+
+  const user=result.user;
+
+  const adminRef=doc(centralDB,"admins",user.uid);
+  const adminSnap=await getDoc(adminRef);
+
+  if(!adminSnap.exists()){
+    throw new Error("Conta não cadastrada como ADM na Central.");
+  }
+
+  const data=adminSnap.data();
+
+  if(data.active!==true && data.ative!==true){
+    throw new Error("Autorização ADM não está ativa.");
+  }
+
+  return user;
+}
+
+async function registrarEventoAnalista(action,details){
+  const user=await conectarAnalistaCentral();
+
+  const allowedActions=[
+    "integration_test",
+    "admin_action"
+  ];
+
+  if(!allowedActions.includes(action)){
+    throw new Error("Tipo de evento não permitido.");
+  }
+
+  await addDoc(collection(centralDB,"portalEvents"),{
+    portal:"analista",
+    action,
+    details:String(details||"").slice(0,500),
+    uid:user.uid,
+    userEmail:user.email||"",
+    createdAt:serverTimestamp()
+  });
+}
+
+/* BOTÃO DE TESTE DA INTEGRAÇÃO */
+const btn=document.createElement("button");
+
+btn.textContent="🔗 Conectar Central ADM";
+btn.type="button";
+
+Object.assign(btn.style,{
+  position:"fixed",
+  right:"12px",
+  bottom:"80px",
+  zIndex:"9998",
+  background:"#2563eb",
+  color:"white",
+  border:"1px solid #60a5fa",
+  borderRadius:"12px",
+  padding:"12px 16px",
+  fontWeight:"bold",
+  cursor:"pointer",
+  boxShadow:"0 6px 22px #0007"
+});
+
+btn.addEventListener("click",async()=>{
+  btn.disabled=true;
+  btn.textContent="Conectando...";
+
+  try{
+    await registrarEventoAnalista(
+      "integration_test",
+      "Integração administrativa testada pelo ADM."
+    );
+
+    btn.textContent="✓ Teste enviado";
+    alert("Evento enviado à Central ADM!");
+
+  }catch(error){
+    console.error(error);
+    alert("Falha na integração: "+error.message);
+    btn.textContent="🔗 Conectar Central ADM";
+
+  }finally{
+    btn.disabled=false;
+  }
+});
+
+document.body.appendChild(btn);
+</script>
+
 </body></html>
