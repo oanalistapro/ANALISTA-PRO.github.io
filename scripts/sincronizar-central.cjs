@@ -3,17 +3,13 @@ const admin = require("firebase-admin");
 
 function credencial(nome) {
   const valor = process.env[nome];
-  if (!valor) {
-    throw new Error("Secret ausente: " + nome);
-  }
+  if (!valor) throw new Error("Secret ausente: " + nome);
 
   const dados = JSON.parse(valor);
 
-  if (
-    !dados.project_id ||
-    !dados.client_email ||
-    !dados.private_key
-  ) {
+  if (!dados.project_id ||
+      !dados.client_email ||
+      !dados.private_key) {
     throw new Error("Credencial inválida: " + nome);
   }
 
@@ -30,78 +26,149 @@ const destino = admin.initializeApp({
 
 const dbOrigem = origem.firestore();
 const dbDestino = destino.firestore();
+const serverTime = admin.firestore.FieldValue.serverTimestamp;
 
-const agora = admin.firestore.FieldValue.serverTimestamp();
-
-const LIMITE = 1000;
-
-function texto(valor, max = 300) {
-  return String(valor ?? "").slice(0, max);
+function texto(v, max = 300) {
+  return String(v ?? "").slice(0, max);
 }
 
-async function buscar(colecao) {
-  const snapshot = await dbOrigem
-    .collection(colecao)
-    .limit(LIMITE)
-    .get();
+function numero(v) {
+  const n = Number(v);
+  return Number.isFinite(n) ? n : 0;
+}
 
-  return snapshot.docs.map(doc => ({
-    id: doc.id,
-    dados: doc.data()
-  }));
+function dataSegura(v) {
+  if (!v) return null;
+  if (typeof v.toDate === "function") return v;
+  if (v instanceof Date) return v;
+  if (typeof v === "string") {
+    const d = new Date(v);
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  return null;
+}
+
+function lista(v) {
+  if (Array.isArray(v)) return v;
+  if (v && typeof v === "object") {
+    return Object.values(v);
+  }
+  return [];
+}
+
+function equipesResumidas(dados) {
+  const fonte =
+    dados.teams ??
+    dados.equipes ??
+    dados.times ??
+    [];
+
+  return lista(fonte).slice(0, 100).map((e, i) => {
+    if (typeof e === "string") {
+      return {
+        nome: texto(e, 100),
+        posicao: i + 1,
+        pontos: 0,
+        kills: 0
+      };
+    }
+
+    if (!e || typeof e !== "object") {
+      return {
+        nome: "Equipe " + (i + 1),
+        posicao: i + 1,
+        pontos: 0,
+        kills: 0
+      };
+    }
+
+    return {
+      nome: texto(
+        e.name ?? e.nome ?? e.tag ??
+        e.teamName ?? "Equipe " + (i + 1),
+        100
+      ),
+      posicao: numero(
+        e.position ?? e.posicao ?? e.rank ?? i + 1
+      ),
+      pontos: numero(
+        e.points ?? e.pontos ?? e.totalPoints ?? 0
+      ),
+      kills: numero(
+        e.kills ?? e.abates ?? e.totalKills ?? 0
+      )
+    };
+  });
+}
+
+async function buscarTudo(nome) {
+  const resultados = [];
+  let ultimo = null;
+
+  while (true) {
+    let consulta = dbOrigem
+      .collection(nome)
+      .orderBy(admin.firestore.FieldPath.documentId())
+      .limit(300);
+
+    if (ultimo) consulta = consulta.startAfter(ultimo);
+
+    const snap = await consulta.get();
+
+    if (snap.empty) break;
+
+    for (const d of snap.docs) {
+      resultados.push({ id: d.id, dados: d.data() });
+    }
+
+    ultimo = snap.docs[snap.docs.length - 1];
+
+    if (snap.size < 300) break;
+  }
+
+  return resultados;
+}
+
+async function salvar(colecao, id, dados) {
+  await dbDestino.collection(colecao).doc(id).set({
+    ...dados,
+    syncedAt: serverTime()
+  }, { merge: true });
 }
 
 async function sincronizarUsuarios() {
-  const usuarios = await buscar("users");
+  const itens = await buscarTudo("users");
 
-  let total = 0;
-
-  for (const item of usuarios) {
-    const u = item.dados;
-
-    await dbDestino
-      .collection("portalUsers")
-      .doc("analista_" + item.id)
-      .set({
-        portal: "analista",
-        sourceUid: item.id,
-        displayName: texto(u.name || u.displayName || ""),
-        email: texto(u.email || ""),
-        provider: "firebase",
-        createdAt: u.createdAt || null,
-        syncedAt: agora
-      }, { merge: true });
-
-    total++;
+  for (const { id, dados: d } of itens) {
+    await salvar("portalUsers", "analista_" + id, {
+      portal: "analista",
+      sourceUid: id,
+      displayName: texto(d.name ?? d.displayName ?? ""),
+      email: texto(d.email ?? ""),
+      provider: "firebase",
+      createdAt: dataSegura(d.createdAt),
+      lastLoginAt: dataSegura(d.lastLoginAt)
+    });
   }
 
-  return total;
+  return itens.length;
 }
 
 async function sincronizarSolicitacoes() {
-  const solicitacoes = await buscar("champRequests");
+  const itens = await buscarTudo("champRequests");
 
-  let total = 0;
-
-  for (const item of solicitacoes) {
-    const d = item.dados;
-
-    await dbDestino
-      .collection("analistaRequests")
-      .doc(item.id)
-      .set({
-        portal: "analista",
-        sourceUid: item.id,
-        status: texto(d.status || "desconhecido", 50),
-        createdAt: d.createdAt || null,
-        reviewedAt: d.reviewedAt || null,
-        syncedAt: agora
-      }, { merge: true });
-
-    total++;
+  for (const { id, dados: d } of itens) {
+    await salvar("analistaRequests", id, {
+      portal: "analista",
+      sourceUid: id,
+      status: texto(d.status ?? "desconhecido", 50),
+      createdAt: dataSegura(d.createdAt),
+      reviewedAt: dataSegura(d.reviewedAt),
+      reviewedBy: texto(d.reviewedBy ?? "", 150)
+    });
   }
 
-  return total;
+  return itens.length;
 }
 
 async function sincronizarCampeonatos() {
@@ -112,30 +179,34 @@ async function sincronizarCampeonatos() {
 
   let total = 0;
 
-  for (const nome of colecoes) {
-    const itens = await buscar(nome);
+  for (const colecao of colecoes) {
+    const itens = await buscarTudo(colecao);
 
-    for (const item of itens) {
-      const d = item.dados;
+    for (const { id, dados: d } of itens) {
+      const equipes = equipesResumidas(d);
 
-      await dbDestino
-        .collection("analistaChampionships")
-        .doc(nome + "_" + item.id)
-        .set({
+      await salvar(
+        "analistaChampionships",
+        colecao + "_" + id,
+        {
           portal: "analista",
-          sourceCollection: nome,
-          sourceId: item.id,
+          sourceCollection: colecao,
+          sourceId: id,
           ownerUid: texto(
-            d.ownerUid || d.ownerId || item.id,
+            d.ownerUid ?? d.ownerId ?? id,
             150
           ),
           title: texto(
-            d.title || d.name || d.nome || "",
+            d.title ?? d.name ?? d.nome ?? "",
             200
           ),
           published: d.published === true,
-          syncedAt: agora
-        }, { merge: true });
+          status: texto(d.status ?? "", 50),
+          teamCount: equipes.length,
+          teams: equipes,
+          createdAt: dataSegura(d.createdAt)
+        }
+      );
 
       total++;
     }
@@ -144,7 +215,7 @@ async function sincronizarCampeonatos() {
   return total;
 }
 
-async function sincronizarResumo() {
+async function executar() {
   console.log("Iniciando sincronização ANALISTA PRO");
 
   const usuarios = await sincronizarUsuarios();
@@ -160,19 +231,21 @@ async function sincronizarResumo() {
       usersCount: usuarios,
       requestsCount: solicitacoes,
       championshipsCount: campeonatos,
-      lastSync: agora
+      lastSync: serverTime()
     }, { merge: true });
 
-  console.log("Sincronização concluída", {
-    usuarios,
-    solicitacoes,
-    campeonatos
-  });
+  console.log(
+    "Sincronização concluída ***",
+    "usuários:", usuarios,
+    "solicitações:", solicitacoes,
+    "campeonatos:", campeonatos,
+    "***"
+  );
 }
 
-sincronizarResumo()
+executar()
   .then(() => process.exit(0))
   .catch(erro => {
-    console.error("Falha na sincronização:", erro.message);
+    console.error("ERRO:", erro);
     process.exit(1);
   });
